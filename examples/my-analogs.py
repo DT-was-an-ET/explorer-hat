@@ -7,6 +7,7 @@
 # Derived from code by Gisky
 
 import time
+from math import sqrt
 
 import explorerhat
 
@@ -19,49 +20,68 @@ from config import class_config
 
 config = class_config()
 
-headings = ["Date_time","Time Diff","Reading","Average","ac","AC_Max","Current"]
+headings = ["Date_time","Time Step","Ch1","Ch2","ac","AC_Max","currents RMS","Current"]
 analog_buffer = class_text_buffer(headings,config)
 
 
 delay = 2
-rc_max = 1000
+rc_max = 200
 reading = [0.0]*(rc_max + 1)
-reading_average = [2.475]*(rc_max + 1)
 reading_ac = [0.0]*(rc_max + 1)
+reading_square_total = [0.0]*(rc_max + 1)
 reading_ac_max = [0.0]*(rc_max + 1)
+current_rms = [0.0]*(rc_max + 1)
 current = [0.0]*(rc_max + 1)
-reading_time = [datetime.now()]*(rc_max + 1)
+reading_time = [0.0]*(rc_max + 1)
+time_step = [0.0]*(rc_max + 1)
+
+
+
+reference = explorerhat.analog.one.read()
+rc = 0
+print(reference)
+
+not_finished = True
 
 start_time = datetime.now()
-
-for rc in range(1,rc_max,1):
-	reading[rc] = explorerhat.analog.one.read()
-	reading_time[rc] = datetime.now()
-
+while not_finished:
+	reading[rc] = explorerhat.analog.two.read() 
+	reading_time[rc] = 1000*(datetime.now() - start_time).total_seconds()
+	if (reading_time[rc] >= 1000) or (rc >= rc_max):
+		not_finished = False
+	else:
+		rc +=1
 end_time = datetime.now()
+
+rc_max = rc
+
+reference = (reference + explorerhat.analog.one.read())/2
+
+print( reference)
+
 
 read_time = (end_time - start_time).total_seconds()
 
-for rc in range(0,rc_max,1):
+for rc in range(0,rc_max+1,1):
 	if rc >=1:
-		reading_average[rc] = reading_average[rc-1] + 0.05*(reading[rc] - reading_average[rc-1])
-		reading_ac[rc] = abs(reading[rc]- reading_average[rc])
-		if reading_ac[rc]>reading_ac_max[rc-1]:
-			reading_ac_max[rc] = reading_ac[rc]
+		reading_ac[rc] = abs(reading[rc]-reference)
+		if abs(reading_ac[rc])>reading_ac_max[rc-1]:
+			reading_ac_max[rc] = abs(reading_ac[rc])
 		else:
-			if reading_ac_max[rc-1]>0.001: 
-				reading_ac_max[rc] = reading_ac_max[rc-1] - 0.001
-			elif reading_ac_max[rc-1] <= 0.001:
-				reading_ac_max[rc] = 0
-		current[rc] = 15.686 * reading_ac_max[rc]
+			reading_ac_max[rc] = reading_ac_max[rc-1]
+		#time_step[rc] = 1000*(reading_time[rc]- reading_time[rc-1]).total_seconds()
+		reading_square_total[rc] = reading_square_total[rc-1] + (reading_ac[rc] * reading_ac[rc])
+		current_rms[rc] =  20.826*sqrt(reading_square_total[rc]/rc)
+		current[rc] = 14.598 * reading_ac_max[rc]
 
-	analog_buffer.line_values[0] = make_time_text(reading_time[rc])
-	analog_buffer.line_values[1] = str((reading_time[rc]- reading_time[rc-1]).total_seconds())
-	analog_buffer.line_values[2] = str(reading[rc])
-	analog_buffer.line_values[3] = str(reading_average[rc])
+	analog_buffer.line_values[0] = str(reading_time[rc])
+	analog_buffer.line_values[1] = "not used"
+	analog_buffer.line_values[2] = "not used" #str(reference)
+	analog_buffer.line_values[3] = str(reading[rc])
 	analog_buffer.line_values[4] = str(reading_ac[rc])
 	analog_buffer.line_values[5] = str(reading_ac_max[rc])
-	analog_buffer.line_values[6] = str(current[rc])
+	analog_buffer.line_values[6] = str(current_rms[rc])
+	analog_buffer.line_values[7] = str(current[rc])
 	analog_buffer.just_log(True,0,reading_time[rc],1234)
 
 end_file_time = datetime.now()
